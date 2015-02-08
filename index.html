@@ -226,7 +226,8 @@ function filterHostsAndOutput(hosts) {
                 case 'vm.memory.size[total]': //You may have to add these as well
                    thisHostObj.totalMem = $(this)[0].lastvalue / 1073741824; //1024^3 => GB
                     break;
-                case 'vm.memory.size[free]':
+                // now zabbix 2.4.3 return the vm.memory.size[free]  and not case 'vm.memory.size[free]':
+                case 'vm.memory.size[available]':
                     thisHostObj.freeMem += $(this)[0].lastvalue / 1073741824; //free(avail)=free+cached+inactive on linux, free on Windows
                     break;
                 case 'vm.memory.size[cached]':
