@@ -11,6 +11,8 @@
     <script src="js/jquery.circleprogress.js"></script>
     <!--<link rel="stylesheet" href="css/stylesheet.css" type="text/css"> This is to import the Bebas Neue font - which I believe is left over from a previous Bootstrap theme. Skipping this doesn't seem to break anything -->
 
+    <script src="js/ext/jquery.parseurl.min.js"></script>
+
     <style>
         .nounderline{text-decoration: none !important}
         body {
@@ -128,19 +130,41 @@
 						<label for="view-grid"><input type="radio" class="settings view-select" name="view-select" id="view-select-grid" value="grid" checked />Grid view</label><br/>
 						<label for="view-4"><input type="radio" class="settings view-grid-cols" name="view-grid-cols" id="view-grid-cols-4" value="3">4 columns</label>
 						<label for="view-6"><input type="radio" class="settings view-grid-cols" name="view-grid-cols" id="view-grid-cols-6" value="2">6 columns</label><br/>
-						
+						<label for="groupids"><input type="number" class="settings groupids" name="groupids" id="groupids" value=null>Filter by "Host Group" ID</label><br/>
 					</div>
 					<div class="modal-footer">
-					    <button type="button" class="btn btn-default" data-dismiss="modal">Save</button>
+					    <button type="button" class="btn btn-default" onclick="setURL()" data-dismiss="modal">Save</button>
 					</div>
 				</div>
 			</div>
 		</div>
 </body>
 <script>
-var zabbix; //I guess this has to be a global object
+//Global variables definition
+var zabbix;
+var hosts;
+
+var optionsURL;
+var opt_groupids = null; //default to all groups
+var opt_disksdd = true;
+var opt_netdd = false;
+var opt_refreshloop = 54000;
+
+
 $(document).ready(function() {
 
+    zabbix = new $.zabbix ('http://zabbix.org/zabbix/api_jsonrpc.php', 'guest', ''); //Change zabbix.org to your server's IP, guest to a Zabbix user and the blank to the password
+    if(zabbix.getApiVersion() >= '2.5.1') {
+        throw new Error('Zabbix has been updated, check the new documentation then update the code and Zabbix api version');
+        //API changes can be problematic. The current code seems to work well with 2.2, 2.4 and 2.5 (unreleased, used by zabbix.org/zabbix) version
+    }
+    zabbix.authenticate(); //this gives us our API key, which gets assigned to the zabbix object
+    
+    drawDashboard();
+});
+
+
+function setURL() {
     $('#view-select-grid').click(function() {
         $('.view-grid-cols').attr('disabled', false);
     });
@@ -148,27 +172,41 @@ $(document).ready(function() {
         $('.view-grid-cols').attr('checked', false);
         $('.view-grid-cols').attr('disabled', true);
     });
-    $('.settings').click(function() {
-    	filterHostsAndOutput(hosts); //Any settings change should trigger a redraw.
-    });
+
+    window.location.search="groupid="+document.getElementById('groupids').value;
     
-    zabbix = new $.zabbix ('http://zabbix.org/zabbix/api_jsonrpc.php', 'guest', ''); //Change zabbix.org to your server's IP, guest to a Zabbix user and the blank to the password
-    if(zabbix.getApiVersion() >= '2.5.1') {
-        throw new Error('Zabbix has been updated, check the new documentation then update the code and Zabbix api version');
-        //API changes can be problematic. The current code seems to work well with 2.2, 2.4 and 2.5 (unreleased, used by zabbix.org/zabbix) version
-    }
-    zabbix.authenticate(); //this gives us our API key, which gets assigned to the zabbix object
-   
-   
-   
+    //drawDashboard(); //Any settings change should trigger a redraw.
+}
+
+function parseURL() {
+    optionsURL=$.parseUrl();
+    
+    $.each(optionsURL.query, function(opt, value) {
+        switch (opt) {
+            //TODO: validate what we get from the URL to prevent code injection!
+            case 'groupid':
+                opt_groupids=value;
+                break;
+            case 'diskdd':
+                opt_disksdd=value;
+                break;
+            case 'netddd':
+                opt_netdd=value;
+                break;
+            case 'refresh':
+                opt_refreshloop=value;
+                break;
+        }
+    });
+}
+
+function drawDashboard() {
+    parseURL();
 // Putting the mess that is filterHostsAndOutput into a setInterval would have been cruel and unusual to the maintenance programmer
-   var hosts = getHostsFromZabbix(zabbix);
-   filterHostsAndOutput(hosts);
-   setInterval(function() { var hosts = getHostsFromZabbix(zabbix); filterHostsAndOutput(hosts); }, 54000);
-
-});
-
-
+    hosts = getHostsFromZabbix(zabbix);
+    filterHostsAndOutput(hosts);
+    setInterval(function() { var hosts = getHostsFromZabbix(zabbix); filterHostsAndOutput(hosts); }, opt_refreshloop);
+}
 
 function getHostsFromZabbix(zabbix) {
 	return zabbix.call('host.get', {
@@ -183,8 +221,8 @@ function getHostsFromZabbix(zabbix) {
             "value_type",
             "status",
             "itemid"
-        ],//Next line is thanks to eburgueno, disabled unless you want to use it
-//        "groupids": "11", //Only display hosts in this groupID #.  You should create a new one with all the hosts you want, and templates
+        ],
+        "groupids": opt_groupids, //Only display hosts in this groupID #.  You should create a new one with all the hosts you want, and templates
         "output": "extend",
         "search" : {"host" : ""},
 	"sortfield" : "host",
